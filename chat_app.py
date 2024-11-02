@@ -28,30 +28,47 @@ def get_assistant_response(messages):
         # Get the user's latest message
         user_message = messages[-1]["content"]
         
-        # Get relevant document chunks
-        doc_processor = DocumentProcessor()
-        relevant_chunks = doc_processor.query_similar(user_message)
-        
-        # If we found relevant chunks, include them in the context
-        if relevant_chunks:
-            context = "\n\n".join(relevant_chunks)
-            system_message = {
-                "role": "system",
-                "content": f"Use the following context to help answer the user's question:\n\n{context}\n\nIf the context is relevant, use it to provide a detailed response. If the context isn't relevant, you can answer based on your general knowledge."
-            }
-            # Add system message with context at the beginning
-            augmented_messages = [system_message] + messages
-        else:
-            augmented_messages = messages
-        
-        # Get response from LLM with context
-        response = client.chat.completions.create(
-            model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
-            messages=augmented_messages,
-            max_tokens=1000,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content
+        with st.status("🤔 Processing your request...", expanded=True) as status:
+            # Get relevant document chunks
+            status.write("Searching relevant documents...")
+            doc_processor = DocumentProcessor()
+            relevant_chunks = doc_processor.query_similar(user_message)
+            
+            # If we found relevant chunks, include them in the context
+            if relevant_chunks:
+                status.write("Found relevant context...")
+                # Limit context size by taking most relevant chunks up to ~2000 tokens
+                # Assuming ~4 chars per token, limit to 8000 chars
+                combined_chunks = ""
+                for chunk in relevant_chunks:
+                    if len(combined_chunks) + len(chunk) < 8000:
+                        combined_chunks += chunk + "\n\n"
+                    else:
+                        break
+                
+                system_message = {
+                    "role": "system",
+                    "content": f"Use the following context to help answer the user's question:\n\n{combined_chunks}\n\nIf the context is relevant, use it to provide a detailed response. If the context isn't relevant, you can answer based on your general knowledge."
+                }
+                # Keep only last few messages to manage context window
+                recent_messages = messages[-3:] if len(messages) > 3 else messages
+                augmented_messages = [system_message] + recent_messages
+            else:
+                status.write("No relevant documents found, using general knowledge...")
+                # Keep only last few messages when no context
+                augmented_messages = messages[-4:] if len(messages) > 4 else messages
+            
+            # Get response from LLM with context
+            status.write("Generating response...")
+            response = client.chat.completions.create(
+                model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
+                messages=augmented_messages,
+                max_tokens=800,  # Reduced from 1000
+                temperature=0.7,
+            )
+            status.update(label="Response ready!", state="complete")
+            return response.choices[0].message.content
+            
     except Exception as e:
         st.error(f"Error: {str(e)}")
         return None
@@ -77,28 +94,45 @@ def process_uploaded_file(uploaded_file):
 def init_session_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "is_admin" not in st.session_state:
+        st.session_state.is_admin = False
+    if "show_login" not in st.session_state:
+        st.session_state.show_login = False
 
-def main():
-    check_api_key()
-    st.set_page_config(page_title="AI Chat Assistant", page_icon="🤖")
-    st.title("AI Chat Assistant 🤖")
+def admin_login():
+    """Handle admin login"""
+    if "ADMIN_PASSWORD" not in st.secrets:
+        st.sidebar.error("Admin password not configured.")
+        return False
     
-    init_session_state()
-    
-    # Initialize states
-    if "uploaded_file_processed" not in st.session_state:
-        st.session_state.uploaded_file_processed = False
-    if "should_clear" not in st.session_state:
-        st.session_state.should_clear = False
+    with st.sidebar:
+        st.subheader("Admin Login")
+        password = st.text_input("Password", type="password", key="admin_password")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("Login"):
+                if password == st.secrets["ADMIN_PASSWORD"]:
+                    st.session_state.is_admin = True
+                    st.session_state.show_login = False
+                    st.rerun()
+                else:
+                    st.error("Incorrect password")
+        with col2:
+            if st.button("Cancel"):
+                st.session_state.show_login = False
+                st.rerun()
 
-    def on_file_processed():
-        st.session_state.should_clear = True
-        st.session_state.uploaded_file_processed = True
+def admin_logout():
+    """Handle admin logout"""
+    if st.sidebar.button("Logout Admin"):
+        st.session_state.is_admin = False
+        st.rerun()
+
+def show_document_management():
+    """Display document management interface for admins"""
+    st.sidebar.header("Document Management")
     
     # Add file uploader in the sidebar
-    st.sidebar.header("Upload Document")
-    
-    # If should_clear is True, create a new key for the file uploader
     key = f"file_uploader_{datetime.now().timestamp()}" if st.session_state.should_clear else "file_uploader"
     uploaded_file = st.sidebar.file_uploader(
         label="Upload a document",
@@ -108,26 +142,26 @@ def main():
         label_visibility="collapsed"
     )
     
-    # Create a sidebar container for processing status right after the uploader
+    # Create a sidebar container for processing status
     status_container = st.sidebar.container()
     
     # Reset should_clear after creating new uploader
     if st.session_state.should_clear:
         st.session_state.should_clear = False
     
-    # Automatically process file when uploaded and not already processed
+    # Process uploaded file
     if uploaded_file and not st.session_state.uploaded_file_processed:
         with status_container:
             progress_bar = st.progress(0)
             st.caption(f'Processing: {uploaded_file.name}')
             
-            # Process the file
             success = process_uploaded_file(uploaded_file)
             progress_bar.progress(100)
             
             if success:
                 st.success('File processed successfully!')
-                on_file_processed()
+                st.session_state.should_clear = True
+                st.session_state.uploaded_file_processed = True
                 st.rerun()
     
     # Display uploaded files with delete buttons
@@ -147,7 +181,30 @@ def main():
     # Reset the processed flag when no file is uploaded
     if not uploaded_file:
         st.session_state.uploaded_file_processed = False
+
+def main():
+    check_api_key()
+    st.set_page_config(page_title="AI Chat Assistant", page_icon="🤖")
+    st.title("AI Chat Assistant 🤖")
     
+    init_session_state()
+    
+    # Initialize states for file processing
+    if "uploaded_file_processed" not in st.session_state:
+        st.session_state.uploaded_file_processed = False
+    if "should_clear" not in st.session_state:
+        st.session_state.should_clear = False
+
+    # Sidebar admin section
+    with st.sidebar:
+        if not st.session_state.is_admin:
+            if st.button("Admin Login") or st.session_state.show_login:
+                st.session_state.show_login = True
+                admin_login()
+        else:
+            admin_logout()
+            show_document_management()
+
     # Display chat messages
     for message in st.session_state.messages:
         role = message["role"]
@@ -166,16 +223,17 @@ def main():
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        # Get assistant response
-        assistant_response = get_assistant_response(st.session_state.messages)
-        
-        if assistant_response:
-            # Display assistant response
-            with st.chat_message("assistant"):
-                st.write(assistant_response)
+        # Create a placeholder for the assistant's response
+        with st.chat_message("assistant"):
+            # Get and display assistant response
+            assistant_response = get_assistant_response(st.session_state.messages)
             
-            # Add assistant response to chat history
-            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+            if assistant_response:
+                st.write(assistant_response)
+                # Add assistant response to chat history
+                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+            else:
+                st.error("Failed to get response. Please try again.")
 
 if __name__ == "__main__":
     main()

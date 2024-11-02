@@ -1,9 +1,8 @@
-streamlit
-together
-langchain
-langchain-community
-chromadb
-networkx
-python-dotenv
-supabase
-numpy
+streamlit>=1.31.0  # Core framework
+together  # For Together AI API
+langchain-community  # For document loaders
+networkx  # For graph operations in DocumentProcessor
+numpy  # For array operations with embeddings
+supabase-py  # For Supabase operations
+streamlit-extras  # For stylable_container
+sentence-transformers  # For DefaultEmbeddingFunction

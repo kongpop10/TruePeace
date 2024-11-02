@@ -14,6 +14,11 @@ from utils.document_processor import DocumentProcessor
 # Set your Together AI API key
 os.environ["TOGETHER_API_KEY"] = st.secrets["TOGETHER_API_KEY"]
 
+def check_api_key():
+    if "TOGETHER_API_KEY" not in st.secrets:
+        st.error("Please set the TOGETHER_API_KEY in your Streamlit secrets.")
+        st.stop()
+
 def init_together_client():
     return Together()
 
@@ -74,6 +79,7 @@ def init_session_state():
         st.session_state.messages = []
 
 def main():
+    check_api_key()
     st.set_page_config(page_title="AI Chat Assistant", page_icon="🤖")
     st.title("AI Chat Assistant 🤖")
     
@@ -95,10 +101,11 @@ def main():
     # If should_clear is True, create a new key for the file uploader
     key = f"file_uploader_{datetime.now().timestamp()}" if st.session_state.should_clear else "file_uploader"
     uploaded_file = st.sidebar.file_uploader(
-        "",  # Remove the label text since we have the header
+        label="Upload a document",
         type=["txt", "md"],
         help="Upload a text or markdown file to include in the conversation",
-        key=key
+        key=key,
+        label_visibility="collapsed"
     )
     
     # Create a sidebar container for processing status right after the uploader

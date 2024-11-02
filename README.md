@@ -17,8 +17,10 @@ A Streamlit-based chat application that uses Together AI's API for responses and
    - Create a new project in Supabase
    - Run the following SQL in the SQL editor:
    ```sql
+   -- Enable vector extension
    create extension if not exists vector;
 
+   -- Create the documents table
    create table if not exists document_chunks (
        id text primary key,
        content text,
@@ -26,9 +28,14 @@ A Streamlit-based chat application that uses Together AI's API for responses and
        metadata jsonb
    );
 
-   create or replace function match_documents (
+   -- Drop existing functions to avoid conflicts
+   drop function if exists match_documents;
+   drop function if exists match_documents_v1;
+
+   -- Create the matching function with a specific name
+   create or replace function match_documents_v1 (
        query_embedding vector(384),
-       match_count int
+       match_count integer
    )
    returns table (
        id text,
@@ -40,8 +47,8 @@ A Streamlit-based chat application that uses Together AI's API for responses and
    begin
        return query
        select
-           id,
-           content,
+           document_chunks.id,
+           document_chunks.content,
            1 - (document_chunks.embedding <=> query_embedding) as similarity
        from document_chunks
        order by document_chunks.embedding <=> query_embedding

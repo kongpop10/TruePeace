@@ -1,3 +1,7 @@
 streamlit
 together
-python-dotenv 
+python-dotenv
+langchain
+langchain-community
+chromadb
+networkx

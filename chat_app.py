@@ -28,48 +28,65 @@ def get_assistant_response(messages):
         # Get the user's latest message
         user_message = messages[-1]["content"]
         
-        with st.status("🤔 Processing your request...", expanded=True) as status:
-            # Get relevant document chunks
-            status.write("Searching relevant documents...")
-            doc_processor = DocumentProcessor()
-            relevant_chunks = doc_processor.query_similar(user_message)
-            
-            # If we found relevant chunks, include them in the context
-            if relevant_chunks:
-                status.write("Found relevant context...")
-                # Limit context size by taking most relevant chunks up to ~2000 tokens
-                # Assuming ~4 chars per token, limit to 8000 chars
-                combined_chunks = ""
-                for chunk in relevant_chunks:
-                    if len(combined_chunks) + len(chunk) < 8000:
-                        combined_chunks += chunk + "\n\n"
-                    else:
-                        break
+        # Create a single container for all status messages
+        status_placeholder = st.empty()
+        
+        with status_placeholder:
+            with st.status("☀️ Processing your request...") as status:
+                # Get relevant document chunks
+                status.write("Searching relevant context...")
+                doc_processor = DocumentProcessor()
+                relevant_chunks = doc_processor.query_similar(user_message)
                 
-                system_message = {
-                    "role": "system",
-                    "content": f"Use the following context to help answer the user's question:\n\n{combined_chunks}\n\nIf the context is relevant, use it to provide a detailed response. If the context isn't relevant, you can answer based on your general knowledge."
-                }
-                # Keep only last few messages to manage context window
-                recent_messages = messages[-3:] if len(messages) > 3 else messages
-                augmented_messages = [system_message] + recent_messages
-            else:
-                status.write("No relevant documents found, using general knowledge...")
-                # Keep only last few messages when no context
-                augmented_messages = messages[-4:] if len(messages) > 4 else messages
-            
-            # Get response from LLM with context
-            status.write("Generating response...")
-            response = client.chat.completions.create(
-                model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
-                messages=augmented_messages,
-                max_tokens=800,  # Reduced from 1000
-                temperature=0.7,
-            )
-            status.update(label="Response ready!", state="complete")
-            return response.choices[0].message.content
-            
+                # If we found relevant chunks, include them in the context
+                if relevant_chunks:
+                    status.write("Found relevant context...")
+                    # More aggressive token management - limit to ~4000 chars (~1000 tokens)
+                    combined_chunks = ""
+                    for chunk in relevant_chunks:
+                        if len(combined_chunks) + len(chunk) < 4000:
+                            combined_chunks += chunk + "\n\n"
+                        else:
+                            break
+                    
+                    system_message = {
+                        "role": "system",
+                        "content": f"""ใช้ข้อมูลต่อไปนี้ในการตอบคำถาม:
+
+{combined_chunks}
+
+คำแนะนำในการตอบ:
+1. ตอบโดยอ้างอิงจากข้อมูลในเอกสารเป็นหลักเท่านั้น
+2. ให้คำตอบที่ชัดเจน ตรงประเด็น ช่วยคลายความสงสัย
+3. ตอบในแนวทางที่ช่วยลดความคิดปรุงแต่ง และความทุกข์ของผู้ถาม
+4. ใช้ประโยคสั้นๆ ตอบคำถาม ประโยคที่ล้างกันในประโยค คำถามที่ล้างกันในคำถาม
+"""
+                    }
+                    # Keep only last 2 messages to reduce context
+                    recent_messages = messages[-2:] if len(messages) > 2 else messages
+                    augmented_messages = [system_message] + recent_messages
+                else:
+                    status.write("No relevant documents found, using general knowledge...")
+                    # Keep only last 3 messages when no context
+                    augmented_messages = messages[-3:] if len(messages) > 3 else messages
+                
+                # Get response from LLM with context
+                status.write("Generating response...")
+                response = client.chat.completions.create(
+                    model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
+                    messages=augmented_messages,
+                    max_tokens=500,  # Reduced from 800
+                    temperature=0.7,
+                )
+        
+        # Clear the status messages
+        status_placeholder.empty()
+        
+        return response.choices[0].message.content
+                
     except Exception as e:
+        if 'status_placeholder' in locals():
+            status_placeholder.empty()
         st.error(f"Error: {str(e)}")
         return None
 
@@ -105,22 +122,25 @@ def admin_login():
         st.sidebar.error("Admin password not configured.")
         return False
     
-    with st.sidebar:
-        st.subheader("Admin Login")
+    with st.sidebar.expander("Admin Login"):
+        # Create a container for login elements
         password = st.text_input("Password", type="password", key="admin_password")
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("Login"):
-                if password == st.secrets["ADMIN_PASSWORD"]:
-                    st.session_state.is_admin = True
-                    st.session_state.show_login = False
-                    st.rerun()
-                else:
-                    st.error("Incorrect password")
-        with col2:
-            if st.button("Cancel"):
+        
+        # Check for Enter key press or button click
+        if st.button("Login") or (password and st.session_state.get("admin_password", "") != ""):
+            # Convert both passwords to strings and strip whitespace
+            entered_pass = str(password).strip()
+            stored_pass = str(st.secrets["ADMIN_PASSWORD"]).strip()
+            
+            if entered_pass == stored_pass:
+                st.session_state.is_admin = True
                 st.session_state.show_login = False
+                st.success("Login successful!")
                 st.rerun()
+            else:
+                st.error("Incorrect password")
+                # Clear the password field after failed attempt
+                st.session_state.admin_password = ""
 
 def admin_logout():
     """Handle admin logout"""
@@ -182,10 +202,110 @@ def show_document_management():
     if not uploaded_file:
         st.session_state.uploaded_file_processed = False
 
+def display_message(role: str, content: str):
+    """Display a chat message with custom styled icons"""
+    # Add custom CSS for avatar styling
+    st.markdown("""
+        <style>
+        /* Style for AI assistant avatar */
+        [data-testid="chat-message-avatar-assistant"] {
+            background-color: #ffd70020 !important;
+            padding: 5px !important;
+            border-radius: 50% !important;
+        }
+        
+        /* Style for user avatar */
+        [data-testid="chat-message-avatar-user"] {
+            background-color: #ff8c0020 !important;
+            padding: 5px !important;
+            border-radius: 50% !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Set icons with custom colors
+    icon = "✨" if role == "assistant" else "🕯️"  # Lotus for AI, sparkles for user
+    with st.chat_message(role, avatar=icon):
+        st.write(content)
+
 def main():
     check_api_key()
-    st.set_page_config(page_title="AI Chat Assistant", page_icon="🤖")
-    st.title("AI Chat Assistant 🤖")
+    st.set_page_config(
+        page_title="Dhamma Talk",
+        page_icon="🪷",  # Lotus emoji as icon
+        initial_sidebar_state="collapsed",
+        layout="centered"
+    )
+    
+    # Add custom CSS to style the menu button and center content
+    st.markdown("""
+        <style>
+        #MainMenu {visibility: visible;}
+        [data-testid="collapsedControl"] {
+            display: none;
+        }
+        .stDeployButton {
+            display: none;
+        }
+        header {visibility: hidden;}
+        
+        /* Center the title container */
+        .title-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem 0 2rem 0;
+            text-align: center;
+        }
+        
+        /* Style the lotus emoji */
+        .lotus-emoji {
+            font-size: 4rem;
+            line-height: 1.2;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 5rem;
+        }
+        
+        /* Style the title text */
+        .title-text {
+            font-size: 2rem;
+            font-weight: 500;
+            margin: 0;
+            background: linear-gradient(120deg, #ff9a9e 0%, #fad0c4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            .title-text {
+                background: linear-gradient(120deg, #fad0c4 0%, #ff9a9e 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+            }
+        }
+
+        /* Favicon */
+        link[rel="shortcut icon"] {
+            content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🪷%3C/text%3E%3C/svg%3E");
+        }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    # Custom title with lotus emoji and styling
+    st.markdown("""
+        <div class="title-container">
+            <div class="lotus-emoji">🪷</div>
+            <h1 class="title-text">Dhamma Talk</h1>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
     
     init_session_state()
     
@@ -198,9 +318,7 @@ def main():
     # Sidebar admin section
     with st.sidebar:
         if not st.session_state.is_admin:
-            if st.button("Admin Login") or st.session_state.show_login:
-                st.session_state.show_login = True
-                admin_login()
+            admin_login()
         else:
             admin_logout()
             show_document_management()
@@ -209,31 +327,28 @@ def main():
     for message in st.session_state.messages:
         role = message["role"]
         content = message["content"]
-        with st.chat_message(role):
-            st.write(content)
+        display_message(role, content)
 
     # User input
     user_input = st.chat_input("Type your message here...")
     
     if user_input:
         # Display user message
-        with st.chat_message("user"):
-            st.write(user_input)
+        display_message("user", user_input)
         
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": user_input})
         
         # Create a placeholder for the assistant's response
-        with st.chat_message("assistant"):
-            # Get and display assistant response
-            assistant_response = get_assistant_response(st.session_state.messages)
-            
-            if assistant_response:
-                st.write(assistant_response)
-                # Add assistant response to chat history
-                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
-            else:
-                st.error("Failed to get response. Please try again.")
+        # Get and display assistant response
+        assistant_response = get_assistant_response(st.session_state.messages)
+        
+        if assistant_response:
+            display_message("assistant", assistant_response)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+        else:
+            st.error("Failed to get response. Please try again.")
 
 if __name__ == "__main__":
     main()

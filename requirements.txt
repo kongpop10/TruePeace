@@ -1,7 +1,9 @@
 streamlit
 together
-python-dotenv
 langchain
 langchain-community
 chromadb
 networkx
+python-dotenv
+supabase
+numpy

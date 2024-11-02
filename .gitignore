@@ -40,6 +40,13 @@ env/
 temp_*
 *.log
 
+# Database
+*.sqlite3
+*.db
+
+# Supabase
+.supabase/
+
 # OS specific
 .DS_Store
 Thumbs.db

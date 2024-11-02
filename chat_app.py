@@ -32,7 +32,7 @@ def get_assistant_response(messages):
         status_placeholder = st.empty()
         
         with status_placeholder:
-            with st.status("☀️ Processing your request...") as status:
+            with st.status("✨ Processing your request...") as status:
                 # Get relevant document chunks
                 status.write("Searching relevant context...")
                 doc_processor = DocumentProcessor()
@@ -224,7 +224,7 @@ def display_message(role: str, content: str):
     """, unsafe_allow_html=True)
     
     # Set icons with custom colors
-    icon = "✨" if role == "assistant" else "🕯️"  # Lotus for AI, sparkles for user
+    icon = "☀️" if role == "assistant" else "🕯️"  # Lotus for AI, sparkles for user
     with st.chat_message(role, avatar=icon):
         st.write(content)
 
@@ -232,7 +232,7 @@ def main():
     check_api_key()
     st.set_page_config(
         page_title="Dhamma Talk",
-        page_icon="🪷",  # Lotus emoji as icon
+        page_icon="☀️",  # Changed from 🪷 to ☀️
         initial_sidebar_state="collapsed",
         layout="centered"
     )
@@ -292,7 +292,7 @@ def main():
 
         /* Favicon */
         link[rel="shortcut icon"] {
-            content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🪷%3C/text%3E%3C/svg%3E");
+            content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E☀️%3C/text%3E%3C/svg%3E");
         }
         </style>
         """, unsafe_allow_html=True)

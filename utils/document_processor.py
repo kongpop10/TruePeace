@@ -6,10 +6,11 @@ import networkx as nx
 from chromadb.utils import embedding_functions
 import streamlit as st
 from .supabase_config import SupabaseManager
+from sentence_transformers import SentenceTransformer
 
 class DocumentProcessor:
     def __init__(self):
-        self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
+        self.embedding_function = SentenceTransformer('all-MiniLM-L6-v2')
         self.supabase = SupabaseManager()
         self.graph = nx.Graph()
         
@@ -64,7 +65,7 @@ class DocumentProcessor:
             for i, chunk in enumerate(chunks):
                 try:
                     chunk_id = f"{base_id}_{i}"
-                    embedding = self.embedding_function([chunk.page_content])[0]
+                    embedding = self.embedding_function.encode([chunk.page_content])[0].tolist()
                     
                     self.supabase.store_document_chunk(
                         chunk_id=chunk_id,
@@ -90,7 +91,7 @@ class DocumentProcessor:
     def query_similar(self, query: str, n_results: int = 3) -> List[str]:
         """Query similar documents using Supabase vector similarity"""
         try:
-            query_embedding = self.embedding_function([query])[0]
+            query_embedding = self.embedding_function.encode([query])[0].tolist()
             results = self.supabase.query_similar(query_embedding, n_results)
             return [result['content'] for result in results] if results else []
         except Exception as e:

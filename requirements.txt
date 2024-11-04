@@ -5,5 +5,5 @@ langchain-community
 pypdf>=3.17.1
 numpy>=1.26.0
 networkx
-chromadb
 protobuf==3.20.3  
+sentence-transformers

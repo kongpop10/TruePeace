@@ -3,7 +3,6 @@ from typing import List, Set
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 import networkx as nx
-from chromadb.utils import embedding_functions
 import streamlit as st
 from .supabase_config import SupabaseManager
 from sentence_transformers import SentenceTransformer

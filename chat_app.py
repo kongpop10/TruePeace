@@ -3,6 +3,7 @@ import os
 import sys
 from together import Together
 from datetime import datetime
+import base64 
 
 # Add the current directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -297,15 +298,20 @@ def main():
         </style>
         """, unsafe_allow_html=True)
     
-    # Custom title with lotus emoji and styling
-    st.markdown("""
-        <div class="title-container">
-            <div class="lotus-emoji">🪷</div>
-            <h1 class="title-text">Beyond Path</h1>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+    # Custom title with lotus image
+    def get_base64_image(image_path):
+        with open(image_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        return encoded_string
+
+    # Convert the image and embed it in HTML
+    image_base64 = get_base64_image("assets/lotus.png")
+    st.markdown(f"""
+        <div style="text-align: center;">
+            <img src="data:image/png;base64,{image_base64}" alt="Lotus" style="width: 120px; height: auto; margin-left: -30px;"/>
+            <h1>Beyond Path</h1>
+    </div>
+    """, unsafe_allow_html=True)
     
     init_session_state()
     

@@ -4,6 +4,7 @@ import sys
 from together import Together
 from datetime import datetime
 import base64 
+import tempfile
 
 # Add the current directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -229,11 +230,68 @@ def display_message(role: str, content: str):
     with st.chat_message(role, avatar=icon):
         st.write(content)
 
+def reindex_documents():
+    """Reindex all documents in the Supabase database."""
+    try:
+        doc_processor = DocumentProcessor()
+        uploaded_files = doc_processor.get_uploaded_files()
+        
+        # Initialize the progress bar
+        progress_bar = st.progress(0)
+        
+        total_files = len(uploaded_files)
+        
+        # Create a placeholder for the current file message
+        current_file_placeholder = st.empty()
+        
+        for index, file in enumerate(uploaded_files):
+            # Display the current file being indexed
+            current_file_placeholder.text(f"Currently indexing: {file}")  # Show the current file name
+            
+            # Fetch the document content from Supabase
+            document_chunks = doc_processor.supabase.get_document_chunks()
+            
+            # Find the content for the current file
+            document_content = ""
+            for chunk in document_chunks:
+                if chunk['id'].startswith(file):
+                    document_content += chunk['content'] + "\n"
+            
+            if document_content:
+                # Create a temporary file to process the content
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as temp_file:
+                    temp_file.write(document_content.encode('utf-8'))
+                    temp_file_path = temp_file.name
+                
+                # Process the temporary file to reindex
+                doc_processor.process_file(temp_file_path, file)
+                
+                # Update the progress bar
+                progress = (index + 1) / total_files
+                progress_bar.progress(progress)
+                
+                # Optionally delete the temporary file after processing
+                os.remove(temp_file_path)
+            else:
+                st.warning(f"No content found for {file}. Skipping.")
+        
+        # Complete the progress bar
+        progress_bar.progress(1.0)  # Set to 100%
+        st.toast("Reindexing completed successfully!", icon="✅")
+        
+        # Clear the current file message
+        current_file_placeholder.empty()  # Hide the current file message
+        
+        # Clear the progress bar
+        progress_bar.empty()  # Hide the progress bar
+    except Exception as e:
+        st.toast(f"Error during reindexing: {str(e)}", icon="⚠️")
+
 def main():
     check_api_key()
     st.set_page_config(
         page_title="Beyond Path",
-        page_icon="☀️",  # Changed from 🪷 to ☀️
+        page_icon="☀️",
         initial_sidebar_state="collapsed",
         layout="centered"
     )
@@ -328,6 +386,10 @@ def main():
         else:
             admin_logout()
             show_document_management()
+            
+            # Add a button for reindexing documents
+            if st.button("Reindex Documents"):
+                reindex_documents()
 
     # Display chat messages
     for message in st.session_state.messages:

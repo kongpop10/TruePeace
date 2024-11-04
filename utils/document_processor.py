@@ -51,8 +51,8 @@ class DocumentProcessor:
             
             documents = loader.load()
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=8000,
-                chunk_overlap=500,
+                chunk_size=150,
+                chunk_overlap=30,
                 separators=["\n\n", "\n", " ", ""]
             )
             chunks = text_splitter.split_documents(documents)

@@ -31,11 +31,16 @@ class DocumentProcessor:
             return set()
             
     def remove_file(self, base_filename: str):
-        """Remove a file and its chunks from Supabase"""
+        """Remove a file and its chunks from Supabase."""
         try:
+            # Delete all chunks associated with the base filename
             success = self.supabase.delete_document_chunks(base_filename)
             if success:
-                st.toast(f"Removed {base_filename}", icon="✅")
+                st.toast(f"Removed all chunks for {base_filename}", icon="✅")
+            
+            # Optionally, you can also remove the file from any other storage if applicable
+            # For example, if you have a method to delete the file itself, call it here.
+            
             return success
         except Exception as e:
             st.toast(f"Error removing file: {str(e)}", icon="⚠️")
@@ -50,6 +55,10 @@ class DocumentProcessor:
                 loader = TextLoader(file_path, encoding='utf-8')
             
             documents = loader.load()
+            if not documents:
+                st.toast(f"No content found in {original_filename}.", icon="⚠️")
+                return []
+
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=150,
                 chunk_overlap=30,
@@ -66,6 +75,9 @@ class DocumentProcessor:
                     chunk_id = f"{base_id}_{i}"
                     embedding = self.embedding_function.encode([chunk.page_content])[0].tolist()
                     
+                    # Log the chunk being stored
+                    # print(f"Storing chunk: {chunk_id} for file: {original_filename}")  # Commented out
+                    
                     self.supabase.store_document_chunk(
                         chunk_id=chunk_id,
                         content=chunk.page_content,
@@ -81,6 +93,7 @@ class DocumentProcessor:
                     st.toast(f"Error processing chunk {i}: {str(e)}", icon="⚠️")
                     continue
             
+            st.toast(f"Successfully processed {len(chunks)} chunks for {original_filename}.", icon="✅")
             return [chunk.page_content for chunk in chunks]
             
         except Exception as e:
@@ -88,11 +101,20 @@ class DocumentProcessor:
             raise e
 
     def query_similar(self, query: str, n_results: int = 3) -> List[str]:
-        """Query similar documents using Supabase vector similarity"""
+        """Query similar documents using Supabase vector similarity with improved retrieval."""
         try:
+            # Generate the embedding for the query
             query_embedding = self.embedding_function.encode([query])[0].tolist()
+            
+            # Retrieve similar documents from Supabase
             results = self.supabase.query_similar(query_embedding, n_results)
-            return [result['content'] for result in results] if results else []
+            
+            # If results are found, sort them based on similarity score
+            if results:
+                # Assuming results contain 'content' and 'similarity' fields
+                sorted_results = sorted(results, key=lambda x: x['similarity'], reverse=True)
+                return [result['content'] for result in sorted_results[:n_results]]  # Limit to n_results
+            return []
         except Exception as e:
             st.toast(f"Error in query_similar: {str(e)}", icon="⚠️")
             return []

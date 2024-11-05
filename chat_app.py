@@ -27,23 +27,17 @@ def init_together_client():
 def get_assistant_response(messages):
     client = init_together_client()
     try:
-        # Get the user's latest message
         user_message = messages[-1]["content"]
-        
-        # Create a single container for all status messages
         status_placeholder = st.empty()
         
         with status_placeholder:
             with st.status("✨ Processing your request...") as status:
-                # Get relevant document chunks
                 status.write("Searching relevant context...")
                 doc_processor = DocumentProcessor()
                 relevant_chunks = doc_processor.query_similar(user_message)
                 
-                # If we found relevant chunks, include them in the context
                 if relevant_chunks:
                     status.write("Found relevant context...")
-                    # More aggressive token management - limit to ~4000 chars (~1000 tokens)
                     combined_chunks = ""
                     for chunk in relevant_chunks:
                         if len(combined_chunks) + len(chunk) < 4000:
@@ -61,30 +55,26 @@ def get_assistant_response(messages):
 1. ตอบโดยอ้างอิงจากข้อมูลในเอกสารเป็นหลัก
 2. ให้คำตอบที่ชัดเจน ตรงประเด็น ช่วยคลายความสงสัย
 3. ตอบในแนวทางที่ช่วยลดความคิดปรุงแต่ง และความทุกข์ของผู้ถาม
-4. ใช้ประโยคสั้นๆ ตอบคำถาม ประโยคที่ล้างกันในประโยค คำถามที่ล้างกันในคำถาม
+4. ตอบอย่าใช้คำว่า ตามข้อมูลที่ให้มา ให้ตอบไปตรงๆ
+5. ถ้าถามเกี่ยวกับ มหากรุณา ให้ตอบว่า ให้ฟังสัจธรรมจากวัดร่มโพธิธรรม จ.เลย
 """
                     }
-                    # Keep only last 2 messages to reduce context
                     recent_messages = messages[-2:] if len(messages) > 2 else messages
                     augmented_messages = [system_message] + recent_messages
                 else:
                     status.write("No relevant documents found, using general knowledge...")
-                    # Keep only last 3 messages when no context
                     augmented_messages = messages[-3:] if len(messages) > 3 else messages
                 
-                # Get response from LLM with context
                 status.write("Generating response...")
                 response = client.chat.completions.create(
                     model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
                     messages=augmented_messages,
-                    max_tokens=500,  # Reduced from 800
+                    max_tokens=500,
                     temperature=0.7,
                 )
         
-        # Clear the status messages
         status_placeholder.empty()
-        
-        return response.choices[0].message.content
+        return response.choices[0].message.content.replace("assistant", "")
                 
     except Exception as e:
         if 'status_placeholder' in locals():
@@ -101,7 +91,12 @@ def process_uploaded_file(uploaded_file):
         
         # Process the file using DocumentProcessor
         doc_processor = DocumentProcessor()
-        doc_processor.process_file(temp_file_path, uploaded_file.name)
+        processed_chunks = doc_processor.process_file(temp_file_path, uploaded_file.name)
+        
+        if processed_chunks:
+            st.success('File processed successfully!')
+        else:
+            st.warning('No chunks were processed from the uploaded file.')
         
         # Clean up the temporary file
         os.remove(temp_file_path)
@@ -228,7 +223,11 @@ def display_message(role: str, content: str):
     # Set icons with custom colors
     icon = "☀️" if role == "assistant" else "🕯️"  # Lotus for AI, sparkles for user
     with st.chat_message(role, avatar=icon):
-        st.write(content)
+        # Only display content for assistant messages without the role
+        if role == "assistant":
+            st.write(content)  # Display content without the role
+        else:
+            st.write(content)  # Display content for user
 
 def reindex_documents():
     """Reindex all documents in the Supabase database."""
@@ -273,7 +272,7 @@ def reindex_documents():
                 # Optionally delete the temporary file after processing
                 os.remove(temp_file_path)
             else:
-                st.warning(f"No content found for {file}. Skipping.")
+                st.toast(f"No content found for {file}. Skipping.", icon="⚠️")
         
         # Complete the progress bar
         progress_bar.progress(1.0)  # Set to 100%

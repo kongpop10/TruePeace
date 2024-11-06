@@ -67,7 +67,7 @@ def get_assistant_response(messages):
                 
                 status.write("Generating response...")
                 response = client.chat.completions.create(
-                    model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
+                    model="meta-llama/Llama-Vision-Free",
                     messages=augmented_messages,
                     max_tokens=500,
                     temperature=0.7,

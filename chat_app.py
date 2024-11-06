@@ -1,10 +1,12 @@
 import streamlit as st
 import os
 import sys
-from together import Together
+from groq import Groq
 from datetime import datetime
 import base64 
 import tempfile
+import time
+import requests
 
 # Add the current directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,19 +15,35 @@ sys.path.append(current_dir)
 # Update the import to use the correct path
 from utils.document_processor import DocumentProcessor
 
-# Set your Together AI API key
-os.environ["TOGETHER_API_KEY"] = st.secrets["TOGETHER_API_KEY"]
-
 def check_api_key():
-    if "TOGETHER_API_KEY" not in st.secrets:
-        st.error("Please set the TOGETHER_API_KEY in your Streamlit secrets.")
+    if "GROQ_API_KEY" not in st.secrets:
+        st.error("Please set the GROQ_API_KEY in your Streamlit secrets.")
         st.stop()
+    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
 
-def init_together_client():
-    return Together()
+def init_groq_client():
+    return Groq()
+
+def handle_rate_limit_error(response_headers):
+    """Handle rate limit information from Groq API headers"""
+    retry_after = int(response_headers.get('retry-after', 0))
+    remaining_requests = int(response_headers.get('x-ratelimit-remaining-requests', 0))
+    remaining_tokens = int(response_headers.get('x-ratelimit-remaining-tokens', 0))
+    
+    if retry_after > 0:
+        st.warning(f"Rate limit reached. Please wait {retry_after} seconds before trying again.")
+        time.sleep(retry_after)
+        return True
+    
+    if remaining_requests == 0 or remaining_tokens == 0:
+        reset_requests = response_headers.get('x-ratelimit-reset-requests', '0s')
+        reset_tokens = response_headers.get('x-ratelimit-reset-tokens', '0s')
+        st.warning(f"Rate limit approaching. Requests reset in: {reset_requests}, Tokens reset in: {reset_tokens}")
+    
+    return False
 
 def get_assistant_response(messages):
-    client = init_together_client()
+    client = init_groq_client()
     try:
         user_message = messages[-1]["content"]
         status_placeholder = st.empty()
@@ -45,34 +63,64 @@ def get_assistant_response(messages):
                         else:
                             break
                     
+                    # Create a more explicit system message with instructions to use the context
                     system_message = {
                         "role": "system",
-                        "content": f"""ใช้ข้อมูลต่อไปนี้ในการตอบคำถาม:
+                        "content": """You are a helpful assistant that answers questions based on the provided context. 
+Always use the context below to formulate your responses. If the information isn't in the context, 
+say you don't have enough information to answer accurately.
 
-{combined_chunks}
+Context:
+""" + combined_chunks + """
 
-คำแนะนำในการตอบ:
+Instructions for responding:
 1. ตอบตามข้อมูลในเอกสารเป็นหลัก
-2. ให้คำตอบที่ชัดเจน ตรงประเด็น ช่วยคลายความสงสัย
+2. ให้คำตอบที่ชัดเจน ลึก ตรงประเด็น ช่วยคลายความสงสัย
 3. ให้ตัด ให้ลดความคิดปรุงแต่ง และความทุกข์ของผู้ถาม
 4. ตอบอย่าใช้คำว่า ตามข้อมูลที่ให้มา ให้ตอบไปตรงๆ
-5. ถ้าถามเกี่ยวกับ มหากรุณา ให้ตอบว่า ให้ฟังสัจธรรมวัดร่มโพธิธรรม จ.เลย
-"""
+5. ถ้าถามเกี่ยวกับ มหากรุณา ให้ตอบว่า ให้ฟังสัจธรรมวัดร่มโพธิธรรม จ.เลย"""
                     }
+                    
+                    # Format conversation history
+                    conversation = [system_message]
+                    
+                    # Add a reminder of the context before the user's question
+                    conversation.append({
+                        "role": "system",
+                        "content": "Remember to answer based on the context provided above."
+                    })
+                    
+                    # Add recent conversation history
                     recent_messages = messages[-2:] if len(messages) > 2 else messages
-                    augmented_messages = [system_message] + recent_messages
+                    conversation.extend(recent_messages)
+                    
                 else:
                     status.write("No relevant documents found, using general knowledge...")
-                    augmented_messages = messages[-3:] if len(messages) > 3 else messages
+                    conversation = messages[-3:] if len(messages) > 3 else messages
                 
                 status.write("Generating response...")
-                response = client.chat.completions.create(
-                    model="meta-llama/Meta-Llama-3.1-70B-Instruct-lora",
-                    messages=augmented_messages,
-                    max_tokens=500,
-                    temperature=0.7,
-                )
-        
+                try:
+                    response = client.chat.completions.create(
+                        model="llama-3.1-70b-versatile",
+                        messages=conversation,
+                        max_tokens=500,
+                        temperature=0.7,
+                        top_p=0.9,
+                        stream=False
+                    )
+                    
+                    # Check rate limit headers from response
+                    if hasattr(response, 'headers'):
+                        if handle_rate_limit_error(response.headers):
+                            # If rate limited, retry after waiting
+                            return get_assistant_response(messages)
+                            
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 429:  # Rate limit exceeded
+                        handle_rate_limit_error(e.response.headers)
+                        return "Rate limit exceeded. Please try again in a few moments."
+                    raise e
+                
         status_placeholder.empty()
         return response.choices[0].message.content.replace("assistant", "")
                 

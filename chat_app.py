@@ -181,21 +181,24 @@ def admin_login():
         return False
     
     with st.sidebar.expander("Admin Login"):
-        # Show error message if login failed
-        if "login_error" in st.session_state and st.session_state.login_error:
-            st.error("Incorrect password")
+        # Initialize session state variables if they don't exist
+        if "login_error" not in st.session_state:
             st.session_state.login_error = False
-            
-        # Create a container for login elements
-        if "clear_password" in st.session_state and st.session_state.clear_password:
-            # Reset the clear_password flag
+        if "clear_password" not in st.session_state:
             st.session_state.clear_password = False
-            # Use a new key for the password input
-            st.session_state.pw_key = f"admin_password_{datetime.now().timestamp()}"
-        
         if "pw_key" not in st.session_state:
             st.session_state.pw_key = "admin_password_0"
-            
+        
+        # Show error message if login failed
+        if st.session_state.login_error:
+            st.error("Incorrect password")
+            st.session_state.login_error = False
+        
+        # Create a container for login elements
+        if st.session_state.clear_password:
+            st.session_state.clear_password = False
+            st.session_state.pw_key = f"admin_password_{datetime.now().timestamp()}"
+        
         password = st.text_input("Password", type="password", key=st.session_state.pw_key)
         
         # Check for Enter key press or button click
@@ -205,6 +208,8 @@ def admin_login():
             stored_pass = str(st.secrets["ADMIN_PASSWORD"]).strip()
             
             if entered_pass == stored_pass:
+                if "is_admin" not in st.session_state:
+                    st.session_state.is_admin = False
                 st.session_state.is_admin = True
                 st.session_state.show_login = False
                 st.success("Login successful!")

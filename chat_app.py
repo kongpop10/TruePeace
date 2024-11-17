@@ -50,30 +50,43 @@ def get_assistant_response(messages):
         
         with status_placeholder:
             with st.status("✨ Processing your request...") as status:
-                status.write("Searching relevant context...")
-                doc_processor = DocumentProcessor()
-                relevant_chunks = doc_processor.query_similar(user_message)
+                # Extract keywords from user message
+                keywords = [word.strip() for word in user_message.split() if len(word.strip()) > 1]
+                status.write(f"Keywords extracted: {', '.join(keywords)}")
                 
-                if relevant_chunks:
-                    status.write("Found relevant context...")
-                    combined_chunks = ""
-                    for chunk in relevant_chunks:
-                        if len(combined_chunks) + len(chunk) < 4000:
-                            combined_chunks += chunk + "\n\n"
-                        else:
-                            break
+                # Search for content using the keywords
+                doc_processor = DocumentProcessor()
+                all_chunks = []
+                
+                for keyword in keywords:
+                    chunks = doc_processor.query_similar(keyword)
+                    if chunks:
+                        all_chunks.extend(chunks)
+                
+                if all_chunks:
+                    status.write("Found relevant content...")
+                    # Remove duplicates while preserving order
+                    seen = set()
+                    unique_chunks = []
+                    for chunk in all_chunks:
+                        if chunk not in seen:
+                            unique_chunks.append(chunk)
+                            seen.add(chunk)
                     
-                    # Create a more explicit system message with instructions to use the context
+                    # Combine chunks (limit to 10 most relevant)
+                    combined_chunks = "\n\n".join(unique_chunks[:10])
+                    
+                    # Create system message with context
                     system_message = {
                         "role": "system",
-                        "content": """You are a helpful assistant that answers questions based on the provided context. 
-Always use the context below to formulate your responses. If the information isn't in the context, 
-say you don't have enough information to answer accurately.
+                        "content": f"""You are a helpful assistant that answers questions based on the provided context. 
+Use the information from the context below to answer the user's question: "{user_message}"
 
 Context:
-""" + combined_chunks + """
+{combined_chunks}
 
-Instructions for responding:
+Instructions:
+
 1. ตอบตามข้อมูลในเอกสารเป็นหลัก
 2. ให้คำตอบที่ชัดเจน ลึก ตรงประเด็น ช่วยคลายความสงสัย
 3. ให้ตัด ให้ลดความคิดปรุงแต่ง และความทุกข์ของผู้ถาม
@@ -168,11 +181,25 @@ def admin_login():
         return False
     
     with st.sidebar.expander("Admin Login"):
+        # Show error message if login failed
+        if "login_error" in st.session_state and st.session_state.login_error:
+            st.error("Incorrect password")
+            st.session_state.login_error = False
+            
         # Create a container for login elements
-        password = st.text_input("Password", type="password", key="admin_password")
+        if "clear_password" in st.session_state and st.session_state.clear_password:
+            # Reset the clear_password flag
+            st.session_state.clear_password = False
+            # Use a new key for the password input
+            st.session_state.pw_key = f"admin_password_{datetime.now().timestamp()}"
+        
+        if "pw_key" not in st.session_state:
+            st.session_state.pw_key = "admin_password_0"
+            
+        password = st.text_input("Password", type="password", key=st.session_state.pw_key)
         
         # Check for Enter key press or button click
-        if st.button("Login") or (password and st.session_state.get("admin_password", "") != ""):
+        if st.button("Login") or (password and password.strip() != ""):
             # Convert both passwords to strings and strip whitespace
             entered_pass = str(password).strip()
             stored_pass = str(st.secrets["ADMIN_PASSWORD"]).strip()
@@ -183,10 +210,11 @@ def admin_login():
                 st.success("Login successful!")
                 st.rerun()
             else:
-                st.error("Incorrect password")
-                # Clear the password field after failed attempt
-                st.session_state.admin_password = ""
-
+                # Set flag for error message and clear password
+                st.session_state.login_error = True
+                st.session_state.clear_password = True
+                st.rerun()
+    
 def admin_logout():
     """Handle admin logout"""
     if st.sidebar.button("Logout Admin"):

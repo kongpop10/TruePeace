@@ -100,21 +100,23 @@ class DocumentProcessor:
             st.toast(f"Error processing file: {str(e)}", icon="⚠️")
             raise e
 
-    def query_similar(self, query: str, n_results: int = 3) -> List[str]:
-        """Query similar documents using Supabase vector similarity with improved retrieval."""
+    def query_similar(self, query: str, n_results: int = 5) -> List[str]:
+        """Query documents for keyword matches, with similarity search as fallback."""
         try:
-            # Generate the embedding for the query
+            # Generate embedding (only used if no keyword matches found)
             query_embedding = self.embedding_function.encode([query])[0].tolist()
             
-            # Retrieve similar documents from Supabase
-            results = self.supabase.query_similar(query_embedding, n_results)
+            # Search for matches in document_chunks
+            st.write(f"\nSearching for content containing: {query}")
+            results = self.supabase.query_similar(query, query_embedding, n_results)
             
-            # If results are found, sort them based on similarity score
+            # Extract and return content from matches
             if results:
-                # Assuming results contain 'content' and 'similarity' fields
-                sorted_results = sorted(results, key=lambda x: x['similarity'], reverse=True)
-                return [result['content'] for result in sorted_results[:n_results]]  # Limit to n_results
+                return [result['content'] for result in results]
+            
+            st.write("No matching content found.")
             return []
+            
         except Exception as e:
             st.toast(f"Error in query_similar: {str(e)}", icon="⚠️")
             return []

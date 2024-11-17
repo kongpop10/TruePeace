@@ -4,11 +4,12 @@ A Streamlit-based chat application that uses Groq's LLM API for intelligent resp
 
 ## Features
 
-- 💬 Context-Aware Chat with Groq LLM
+- 💬 Thai Language Chat with Groq LLM
   - Intelligent responses using Groq's Llama 3.1 8B Instant model
   - Enhanced Thai language keyword matching
   - Document-based context integration
   - Smart keyword extraction for better relevance
+  - Automatic rate limit handling
   
 - 📄 Document Management (Admin Only)
   - Support for text and markdown files
@@ -100,6 +101,14 @@ The application uses a sophisticated search approach:
 - Falls back to semantic similarity search if needed
 - Returns up to 10 most relevant chunks for comprehensive answers
 - Optimized for Thai language queries
+
+## Rate Limits
+
+The application handles Groq API rate limits automatically:
+- Displays warnings when approaching limits
+- Shows wait times when limits are reached
+- Automatically retries requests after required wait time
+- Handles both request-based and token-based limits
 
 ## Usage
 

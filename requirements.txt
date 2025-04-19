@@ -4,9 +4,12 @@ langchain-community
 pypdf>=3.17.1
 numpy>=1.26.0
 networkx
-protobuf==3.20.3  
+protobuf==3.20.3
 sentence-transformers
-groq>=0.4.2
+google-generativeai>=0.3.0  # For Gemini API
 python-magic>=0.4.27
 markdown>=3.5.1
 beautifulsoup4>=4.12.2
+sqlite-utils>=3.35  # For SQLite database management
+fastembed>=0.1.1  # For embeddings
+requests>=2.31.0  # For connectivity checks

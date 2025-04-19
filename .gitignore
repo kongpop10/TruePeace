@@ -43,6 +43,7 @@ temp_*
 # Database
 *.sqlite3
 *.db
+data/local_db.sqlite
 
 # Supabase
 .supabase/
@@ -50,3 +51,4 @@ temp_*
 # OS specific
 .DS_Store
 Thumbs.db
+.qodo

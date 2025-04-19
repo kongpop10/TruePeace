@@ -1,22 +1,30 @@
 # Beyond Path Chat Application
 
-A Streamlit-based chat application that uses Groq's LLM API for intelligent responses and Supabase for persistent vector storage. The application provides Thai language support and context-aware conversations through document-based knowledge.
+A Streamlit-based chat application that uses Google's Gemini API for intelligent responses and a hybrid database system (local SQLite + Supabase) for persistent vector storage. The application provides Thai language support and context-aware conversations through document-based knowledge.
+
+## Hybrid Database System
+
+The application now features a robust hybrid database system that:
+- Uses SQLite for local storage when Supabase is unavailable
+- Automatically syncs with Supabase when it becomes available
+- Provides seamless fallback to local storage during connectivity issues
+- Includes admin tools for database management and synchronization
 
 ## Features
 
-- 💬 Thai Language Chat with Groq LLM
-  - Intelligent responses using Groq's Llama 3.1 8B Instant model
+- 💬 Thai Language Chat with Google Gemini
+  - Intelligent responses using Google's Gemini 2.0 Flash model
   - Enhanced Thai language keyword matching
   - Document-based context integration
   - Smart keyword extraction for better relevance
   - Automatic rate limit handling
-  
+
 - 📄 Document Management (Admin Only)
   - Support for text and markdown files
   - Automatic document chunking and embedding
   - Real-time processing status
   - Secure admin interface
-  
+
 - 🔍 Advanced Search
   - Hybrid search combining keyword and semantic matching
   - Up to 10 most relevant context chunks
@@ -34,21 +42,24 @@ A Streamlit-based chat application that uses Groq's LLM API for intelligent resp
 2. **Configure Secrets**
    Create `.streamlit/secrets.toml`:
    ```toml
-   GROQ_API_KEY = "your_groq_api_key"
-   SUPABASE_URL = "your_supabase_url"
-   SUPABASE_KEY = "your_supabase_key"
+   GEMINI_API_KEY = "your_gemini_api_key"
+   SUPABASE_URL = "your_supabase_url"  # Optional - app works without Supabase
+   SUPABASE_KEY = "your_supabase_key"  # Optional - app works without Supabase
    ADMIN_PASSWORD = "your_admin_password"
    ```
 
-3. **Set up Supabase**
+3. **Set up Supabase (Optional)**
    - Create a new Supabase project
    - Enable the Vector extension
    - Run the setup SQL (see Supabase Setup section)
+   - The app will work without Supabase using the local SQLite database
 
 4. **Run the Application**
    ```bash
    streamlit run chat_app.py
    ```
+
+   The application will automatically create a local SQLite database in the `data/` directory.
 
 ## Supabase Setup
 
@@ -104,11 +115,11 @@ The application uses a sophisticated search approach:
 
 ## Rate Limits
 
-The application handles Groq API rate limits automatically:
-- Displays warnings when approaching limits
-- Shows wait times when limits are reached
+The application handles Gemini API rate limits automatically:
+- Displays warnings when limits are reached
 - Automatically retries requests after required wait time
-- Handles both request-based and token-based limits
+- Implements a simplified rate limit handling mechanism
+- Gracefully recovers from rate limit errors
 
 ## Usage
 
